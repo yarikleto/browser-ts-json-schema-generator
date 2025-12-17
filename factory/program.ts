@@ -18,6 +18,16 @@ function createInMemoryCompilerHost(files: FileMap, options: ts.CompilerOptions)
 
     const getText = (fileName: string): string | undefined => normalized[normalizeFileName(fileName)];
 
+    const hasFile = (fileName: string): boolean => getText(fileName) !== undefined;
+
+    const tryResolveProvidedFile = (candidates: string[]): string | undefined => {
+        for (const c of candidates) {
+            const n = normalizeFileName(c);
+            if (hasFile(n)) return n;
+        }
+        return undefined;
+    };
+
     const pickDefaultLibFileName = (opts: ts.CompilerOptions): string => {
         // If the user provided TypeScript lib sources in-memory, prefer TS's default lib name *if present*.
         // Otherwise fall back to common names in the provided lib map (e.g. "lib.d.ts" for tiny synthetic libs).
@@ -35,7 +45,7 @@ function createInMemoryCompilerHost(files: FileMap, options: ts.CompilerOptions)
     };
 
     const host: ts.CompilerHost = {
-        fileExists: (fileName: string) => getText(fileName) !== undefined,
+        fileExists: (fileName: string) => hasFile(fileName),
         readFile: (fileName: string) => getText(fileName),
         getSourceFile: (
             fileName: string,
@@ -75,6 +85,45 @@ function createInMemoryCompilerHost(files: FileMap, options: ts.CompilerOptions)
         return moduleNames.map((moduleName) => {
             const resolved = ts.resolveModuleName(moduleName, containingFile, options, moduleResolutionHost);
             return resolved.resolvedModule;
+        });
+    };
+
+    // Support `compilerOptions.types` / triple-slash `/// <reference types="..."/>` in VFS mode.
+    // TypeScript normally resolves these from `typeRoots` (e.g. node_modules/@types). In browser/VFS mode
+    // we can only resolve from the provided in-memory file map.
+    host.resolveTypeReferenceDirectives = (
+        typeDirectiveNames: string[] | readonly ts.FileReference[],
+        containingFile: string,
+        _redirectedReference: ts.ResolvedProjectReference | undefined,
+        _options: ts.CompilerOptions,
+        _containingFileMode?: ts.ResolutionMode,
+    ): (ts.ResolvedTypeReferenceDirective | undefined)[] => {
+        const dirs = typeDirectiveNames as readonly (string | ts.FileReference)[];
+        return dirs.map((dir) => {
+            const name = typeof dir === "string" ? dir : dir.fileName;
+            const normalizedName = normalizeFileName(name);
+
+            // Allow passing file-like names (including ".d.ts") in `compilerOptions.types`, e.g. "context.d.ts".
+            const candidates: string[] = [];
+            candidates.push(normalizedName);
+            candidates.push("/" + normalizedName.replace(/^\//, ""));
+
+            if (!/\.d\.ts$/.test(normalizedName)) {
+                candidates.push(normalizedName + ".d.ts");
+                candidates.push("/" + normalizedName.replace(/^\//, "") + ".d.ts");
+            }
+
+            // Also support a common "index.d.ts" pattern if caller provides a folder.
+            candidates.push(normalizedName.replace(/\/?$/, "/") + "index.d.ts");
+            candidates.push("/" + normalizedName.replace(/^\//, "").replace(/\/?$/, "/") + "index.d.ts");
+
+            const resolvedFileName = tryResolveProvidedFile(candidates);
+            if (!resolvedFileName) return undefined;
+
+            return {
+                resolvedFileName,
+                primary: true,
+            } satisfies ts.ResolvedTypeReferenceDirective;
         });
     };
 

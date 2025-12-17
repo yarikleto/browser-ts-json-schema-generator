@@ -1083,6 +1083,67 @@ export type B = ReturnType<typeof import("./mod").id<"b">>;
     assert.deepStrictEqual(resolve(schema.definitions?.B), { type: "string", const: "b" });
 });
 
+it("supports compilerOptions.types that point to provided in-memory .d.ts files (Context example)", () => {
+    const fileName = "/index.ts";
+    const userCode = "/user-code.ts";
+    const typesFile = "context.d.ts";
+
+    const customDeclarations = `
+declare interface Context {
+  name: string;
+  innerObject: {
+    name: string;
+    age: number;
+  };
+}
+`.trim();
+
+    const files: Record<string, string> = {
+        [userCode]: `
+export function transform(object: Context) {
+  return object.innerObject.name;
+}
+`,
+        [fileName]: `
+import { transform } from "./user-code";
+export type TransformResult = ReturnType<typeof transform>;
+`,
+    };
+
+    const libDir = path.dirname(ts.getDefaultLibFilePath({ target: ts.ScriptTarget.ES5 }));
+    const libEs5 = fs.readFileSync(path.join(libDir, "lib.es5.d.ts"), "utf8");
+
+    const completedConfig = {
+        ...DEFAULT_CONFIG,
+        files,
+        rootNames: [fileName],
+        compilerOptions: {
+            target: ts.ScriptTarget.ES5,
+            module: ts.ModuleKind.ESNext,
+            // NOTE: TS normally expects package names here (from @types), but in VFS mode we allow
+            // resolving against the in-memory file map.
+            types: [typesFile],
+        },
+        lib: {
+            "lib.es5.d.ts": libEs5,
+            [typesFile]: customDeclarations,
+        },
+    };
+
+    const program = createProgram(completedConfig as any);
+    const generator = createGenerator({ tsProgram: program, type: "TransformResult" });
+    const schema = generator.createSchema("TransformResult");
+
+    // transform returns object.innerObject.name -> string
+    const def: any = schema.definitions?.TransformResult;
+    if (def?.$ref) {
+        const name = decodeURIComponent(String(def.$ref).replace("#/definitions/", ""));
+        assert.deepStrictEqual((schema.definitions as any)[name], { type: "string" });
+    } else {
+        assert.deepStrictEqual(def, { type: "string" });
+    }
+});
+
 it("supports keyof + indexed access over instantiated ReturnType (key unions stay precise)", () => {
     const fileName = "/index.ts";
     const files: Record<string, string> = {

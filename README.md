@@ -176,3 +176,71 @@ If you already have a TypeScript `Program` (for example from a language service 
 
 - **Imports between your in-memory files** work as long as you include all referenced files in `config.files`.
 - The generator does **not** fetch dependencies for you. If your sources import external packages, you must provide their `.d.ts` content in `config.files` too.
+
+### Custom declaration files (`.d.ts`)
+
+Sometimes your code references types that don’t exist in your `files` (e.g. global `Context`, `Window`, or project-specific ambient types).
+In Node.js, TypeScript usually finds these through `node_modules/@types` + `compilerOptions.types`.
+In browser/VFS mode there is no filesystem, so you must provide those declarations **as strings** and tell TypeScript to include them.
+
+#### Option A: global/ambient declarations (recommended for `declare interface Context`)
+
+Put the `.d.ts` file content into `config.lib` and reference it via `compilerOptions.types`.
+
+```ts
+import { createGenerator, ts } from "@yarikleto/browser-ts-json-schema-generator";
+import libEs5 from "typescript/lib/lib.es5.d.ts?raw";
+
+const customDeclarations = `
+  declare interface Context {
+    name: string;
+    innerObject: {
+      name: string;
+      age: number;
+    };
+  }
+`;
+
+const config = {
+  type: "TransformResult",
+  files: {
+    "/user-code.ts": `
+      export function transform(object: Context) {
+        return object.innerObject.name;
+      }
+    `,
+    "/index.ts": `
+      import { transform } from "./user-code";
+      export type TransformResult = ReturnType<typeof transform>;
+    `,
+  },
+  rootNames: ["/index.ts"],
+  compilerOptions: {
+    target: ts.ScriptTarget.ES5,
+    module: ts.ModuleKind.ESNext,
+    // IMPORTANT: in VFS mode we resolve this from `config.lib` (not from node_modules/@types).
+    // You can pass "context" or "context.d.ts".
+    types: ["context.d.ts"],
+  },
+  lib: {
+    "lib.es5.d.ts": libEs5,
+    "context.d.ts": customDeclarations,
+  },
+};
+
+const schema = createGenerator(config).createSchema(config.type);
+```
+
+#### Option B: module declarations (for imported types)
+
+If you want a type to be *imported* (not global), put the `.d.ts` in `config.files` and import it normally:
+
+```ts
+// "/types.d.ts"
+export interface Context { /* ... */ }
+```
+
+```ts
+// "/main.ts"
+import type { Context } from "./types";
+```
