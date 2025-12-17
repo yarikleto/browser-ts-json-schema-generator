@@ -10,6 +10,7 @@ This fork is **browser-only**:
 - No Node.js CLI
 - No filesystem access
 - You pass TypeScript sources as **strings** (`config.files`)
+- You pass file decladations as **strings** (`config.lib`)
 
 ### Install
 
@@ -24,8 +25,8 @@ To build a TypeScript `Program` in a browser, the generator needs:
 - **`rootNames`**: entrypoints (defaults to `Object.keys(files)`)
 - **`compilerOptions`**: optional TS compiler options
 - **`lib`**: in-memory TypeScript standard library `.d.ts` contents (unless you set `compilerOptions.noLib = true`)
-  - `compilerOptions.lib` controls **which** lib files TypeScript wants to include (e.g. `["es2022", "dom"]`)
-  - `config.lib` must provide the **actual file contents** for those libs in browser/VFS mode (e.g. `"lib.es2022.d.ts"`, `"lib.dom.d.ts"`)
+  - `compilerOptions.lib` controls **which** lib files TypeScript wants to include (e.g. `["es5"]`)
+  - `config.lib` must provide the **actual file contents** for those libs in browser/VFS mode (e.g. `"lib.es5.d.ts"`)
   - If `compilerOptions.noLib = true`, then TypeScript won’t include any libs, so `compilerOptions.lib` is effectively ignored
 - **`skipTypeCheck`**: optional. Skips the “throw on TS diagnostics” gate. Note: when `compilerOptions.noLib = true`, the generator automatically skips this gate.
 
@@ -77,8 +78,6 @@ import { createGenerator, ts } from "@yarikleto/browser-ts-json-schema-generator
 
 // Vite can import text files as strings using `?raw`.
 // These files come from your installed `typescript` package.
-// Add `lib.dom.d.ts` only if you use DOM types (Window, Document, HTMLElement, ...).
-import libEs2022 from "typescript/lib/lib.es2022.d.ts?raw";
 import libEs5 from "typescript/lib/lib.es5.d.ts?raw";
 
 const config = {
@@ -92,11 +91,10 @@ const config = {
   },
   rootNames: ["/main.ts"],
   compilerOptions: {
-    target: ts.ScriptTarget.ES2022,
+    target: ts.ScriptTarget.ES5,
     module: ts.ModuleKind.ESNext,
   },
   lib: {
-    "lib.es2022.d.ts": libEs2022,
     "lib.es5.d.ts": libEs5,
   },
 };
@@ -118,7 +116,7 @@ async function loadTsLib(version = "5.9.3") {
   const base = `https://unpkg.com/typescript@${version}/lib/`;
   // Add more files if your target/lib selection requires them.
   // Add `lib.dom.d.ts` only if you use DOM types (Window, Document, HTMLElement, ...).
-  const names = ["lib.es2022.d.ts", "lib.es5.d.ts"];
+  const names = ["lib.es5.d.ts"];
   const entries = await Promise.all(names.map(async (n) => [n, await fetchText(base + n)] as const));
   return Object.fromEntries(entries);
 }
@@ -140,7 +138,7 @@ const config = {
   },
   rootNames: ["/main.ts"],
   compilerOptions: {
-    target: ts.ScriptTarget.ES2022,
+    target: ts.ScriptTarget.ES5,
     module: ts.ModuleKind.ESNext,
   },
   lib,
