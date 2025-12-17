@@ -265,4 +265,227 @@ it("can generate schema for a type that uses standard lib types when TS lib .d.t
     assert.doesNotThrow(() => ajv.compile(schema as any), "Schema has unresolved $ref or other compile-time issues");
 });
 
+it("expands utility type ReturnType<typeof fn> to the actual return object schema", () => {
+    const fileName = "/index.ts";
+    const files: Record<string, string> = {
+        [fileName]: `
+export function transform(input: string): { id: number, name: string } {
+  return { id: 1, name: "test" };
+}
+
+export type TransformResult = ReturnType<typeof transform>;
+`,
+    };
+
+    // ES5-only setup (matches README guidance)
+    const libDir = path.dirname(ts.getDefaultLibFilePath({ target: ts.ScriptTarget.ES5 }));
+    const libEs5 = fs.readFileSync(path.join(libDir, "lib.es5.d.ts"), "utf8");
+
+    const completedConfig = {
+        ...DEFAULT_CONFIG,
+        files,
+        rootNames: [fileName],
+        compilerOptions: {
+            target: ts.ScriptTarget.ES5,
+            module: ts.ModuleKind.ESNext,
+        },
+        lib: { "lib.es5.d.ts": libEs5 },
+    };
+
+    const program = createProgram(completedConfig as any);
+    const generator = createGenerator({ tsProgram: program, type: "TransformResult" });
+    const schema = generator.createSchema("TransformResult");
+
+    const def: any = schema.definitions?.TransformResult;
+    assert.equal(schema.$ref, "#/definitions/TransformResult");
+    assert.equal(def?.type, "object");
+    assert.equal(def?.additionalProperties, false);
+    assert.deepStrictEqual(def?.required?.sort(), ["id", "name"]);
+    assert.deepStrictEqual(def?.properties?.id, { type: "number" });
+    assert.deepStrictEqual(def?.properties?.name, { type: "string" });
+});
+
+it("expands infer-based utility types Parameters<> and ConstructorParameters<> to tuple schemas", () => {
+    const fileName = "/index.ts";
+    const files: Record<string, string> = {
+        [fileName]: `
+export function transform(input: string, flag?: boolean): { id: number, name: string } {
+  return { id: 1, name: "test" };
+}
+export type Params = Parameters<typeof transform>;
+
+export class C {
+  constructor(x: number, y: string) {}
+}
+export type CtorParams = ConstructorParameters<typeof C>;
+`,
+    };
+
+    const libDir = path.dirname(ts.getDefaultLibFilePath({ target: ts.ScriptTarget.ES5 }));
+    const libEs5 = fs.readFileSync(path.join(libDir, "lib.es5.d.ts"), "utf8");
+
+    const completedConfig = {
+        ...DEFAULT_CONFIG,
+        files,
+        rootNames: [fileName],
+        compilerOptions: {
+            target: ts.ScriptTarget.ES5,
+            module: ts.ModuleKind.ESNext,
+        },
+        lib: { "lib.es5.d.ts": libEs5 },
+    };
+
+    const program = createProgram(completedConfig as any);
+    const generator = createGenerator({ tsProgram: program, type: ["Params", "CtorParams"] });
+    const schema = generator.createSchema(["Params", "CtorParams"]);
+
+    const params: any = schema.definitions?.Params;
+    assert.deepStrictEqual(params, {
+        type: "array",
+        minItems: 2,
+        maxItems: 2,
+        items: [
+            { type: "string", title: "input" },
+            { type: "boolean", title: "flag" },
+        ],
+    });
+
+    const ctorParams: any = schema.definitions?.CtorParams;
+    assert.deepStrictEqual(ctorParams, {
+        type: "array",
+        minItems: 2,
+        maxItems: 2,
+        items: [
+            { type: "number", title: "x" },
+            { type: "string", title: "y" },
+        ],
+    });
+});
+
+it("handles a complex nested combination of infer-based utility types", () => {
+    const fileName = "/index.ts";
+    const files: Record<string, string> = {
+        [fileName]: `
+export function transform(this: { ctx: string }, input: string, flag: boolean): { id: number, name: string } {
+  return { id: 1, name: "test" };
+}
+
+export type Ctx = ThisParameterType<typeof transform>;
+export type Args = Parameters<OmitThisParameter<typeof transform>>;
+export type Res = ReturnType<OmitThisParameter<typeof transform>>;
+
+export type Complex = {
+  ctx: Ctx;
+  args: Args;
+  res: Res;
+};
+`,
+    };
+
+    const libDir = path.dirname(ts.getDefaultLibFilePath({ target: ts.ScriptTarget.ES5 }));
+    const libEs5 = fs.readFileSync(path.join(libDir, "lib.es5.d.ts"), "utf8");
+
+    const completedConfig = {
+        ...DEFAULT_CONFIG,
+        files,
+        rootNames: [fileName],
+        compilerOptions: {
+            target: ts.ScriptTarget.ES5,
+            module: ts.ModuleKind.ESNext,
+        },
+        lib: { "lib.es5.d.ts": libEs5 },
+    };
+
+    const program = createProgram(completedConfig as any);
+    const generator = createGenerator({ tsProgram: program, type: "Complex" });
+    const schema = generator.createSchema("Complex");
+
+    const def: any = schema.definitions?.Complex;
+    assert.equal(def?.type, "object");
+    assert.equal(def?.additionalProperties, false);
+    assert.deepStrictEqual(def?.required?.sort(), ["args", "ctx", "res"]);
+
+    // The generator exposes nested types as definitions and references them from Complex.
+    assert.deepStrictEqual(def?.properties?.ctx, { $ref: "#/definitions/Ctx" });
+    assert.deepStrictEqual(def?.properties?.args, { $ref: "#/definitions/Args" });
+    assert.deepStrictEqual(def?.properties?.res, { $ref: "#/definitions/Res" });
+
+    // Ctx: { ctx: string }
+    assert.deepStrictEqual(schema.definitions?.Ctx, {
+        type: "object",
+        properties: { ctx: { type: "string" } },
+        required: ["ctx"],
+        additionalProperties: false,
+    });
+
+    // Args: [string, boolean]
+    assert.deepStrictEqual(schema.definitions?.Args, {
+        type: "array",
+        minItems: 2,
+        maxItems: 2,
+        items: [
+            { type: "string", title: "input" },
+            { type: "boolean", title: "flag" },
+        ],
+    });
+
+    // Res: { id: number, name: string }
+    assert.deepStrictEqual(schema.definitions?.Res, {
+        type: "object",
+        properties: { id: { type: "number" }, name: { type: "string" } },
+        required: ["id", "name"],
+        additionalProperties: false,
+    });
+});
+
+it("supports custom conditional types using infer (non-sourceless)", () => {
+    const fileName = "/index.ts";
+    const files: Record<string, string> = {
+        [fileName]: `
+// Custom infer: extract property type
+export type ExtractProp<T, K extends keyof T> = T extends Record<K, infer V> ? V : never;
+export type PropOut = ExtractProp<{ a: string; b: number }, "b">;
+
+// Custom infer: extract tuple head
+export type Head<T> = T extends [infer H, ...any[]] ? H : never;
+export type HeadOut = Head<[true, 1, "x"]>;
+`,
+    };
+
+    const libDir = path.dirname(ts.getDefaultLibFilePath({ target: ts.ScriptTarget.ES5 }));
+    const libEs5 = fs.readFileSync(path.join(libDir, "lib.es5.d.ts"), "utf8");
+
+    const completedConfig = {
+        ...DEFAULT_CONFIG,
+        files,
+        rootNames: [fileName],
+        compilerOptions: {
+            target: ts.ScriptTarget.ES5,
+            module: ts.ModuleKind.ESNext,
+        },
+        lib: { "lib.es5.d.ts": libEs5 },
+    };
+
+    const program = createProgram(completedConfig as any);
+    const generator = createGenerator({ tsProgram: program, type: ["PropOut", "HeadOut"] });
+    const schema = generator.createSchema(["PropOut", "HeadOut"]);
+
+    const defNameFromRef = (ref: string): string => {
+        assert.ok(ref.startsWith("#/definitions/"), `Unexpected $ref: ${ref}`);
+        return decodeURIComponent(ref.slice("#/definitions/".length));
+    };
+
+    // PropOut should reduce to number (possibly via an instantiated generic alias $ref)
+    const propOutDef: any = schema.definitions?.PropOut;
+    assert.ok(propOutDef && typeof propOutDef === "object");
+    const propOutName = defNameFromRef(propOutDef.$ref);
+    assert.deepStrictEqual((schema.definitions as any)[propOutName], { type: "number" });
+
+    // HeadOut should reduce to boolean literal true (possibly via an instantiated generic alias $ref)
+    const headOutDef: any = schema.definitions?.HeadOut;
+    assert.ok(headOutDef && typeof headOutDef === "object");
+    const headOutName = defNameFromRef(headOutDef.$ref);
+    assert.deepStrictEqual((schema.definitions as any)[headOutName], { type: "boolean", const: true });
+});
+
 
