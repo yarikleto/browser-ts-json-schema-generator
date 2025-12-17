@@ -1,4 +1,8 @@
-# browser-ts-json-schema-generator (browser-only)
+# @yarikleto/browser-ts-json-schema-generator
+
+[![npm version](https://img.shields.io/npm/v/%40yarikleto%2Fbrowser-ts-json-schema-generator.svg)](https://www.npmjs.com/package/@yarikleto/browser-ts-json-schema-generator)
+
+Based on the [ts-json-schema-generator](https://github.com/vega/ts-json-schema-generator)
 
 Generate **JSON Schema** from TypeScript types in the **browser**.
 
@@ -13,7 +17,7 @@ This fork is **browser-only**:
 npm i @yarikleto/browser-ts-json-schema-generator
 ```
 
-### How it works (browser mode)
+### How it works
 
 To build a TypeScript `Program` in a browser, the generator needs:
 - **`files`**: your `.ts/.d.ts` sources as strings
