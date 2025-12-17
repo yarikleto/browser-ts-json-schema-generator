@@ -3,29 +3,23 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 import eslintPluginPrettierRecommended from "eslint-plugin-prettier/recommended";
 
-/** @type {import('@types/eslint').Linter.Config[]} */
+/** @type {import('eslint').Linter.Config[]} */
 export default tseslint.config(
     {
-        ignores: ["dist", "cjs", "build", "eslint.config.mjs", "bin/ts-json-schema-generator.js"],
+        ignores: ["dist", "cjs", "build", "eslint.config.mjs"],
     },
     eslint.configs.recommended,
     {
         files: [
-            "ts-json-schema-generator.ts",
             "index.ts",
             "src/**/*.ts",
             "factory/**/*.ts",
-            "bin/**",
             "test/**/*.test.ts",
             "test/utils.ts",
         ],
-        extends: tseslint.configs.recommendedTypeChecked,
+        extends: tseslint.configs.recommended,
         languageOptions: {
-            sourceType: "commonjs",
-            parserOptions: {
-                project: "tsconfig.eslint.json",
-                tsconfigRootDir: import.meta.dirname,
-            },
+            sourceType: "module",
         },
         rules: {
             "@typescript-eslint/explicit-function-return-type": "off",

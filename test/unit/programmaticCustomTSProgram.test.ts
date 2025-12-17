@@ -1,4 +1,3 @@
-import { createFSBackedSystem, createVirtualTypeScriptEnvironment } from "@typescript/vfs";
 import assert from "node:assert";
 import { it } from "node:test";
 import ts from "typescript";
@@ -16,16 +15,37 @@ it("Can generate a schema from a vfs", () => {
     }
     `;
 
-    const fsMap = new Map<string, string>();
-    fsMap.set("/schema.ts", tsInterface);
+    const fileName = "/schema.ts";
+    const host: ts.CompilerHost = {
+        fileExists: (name) => name === fileName,
+        readFile: (name) => (name === fileName ? tsInterface : undefined),
+        getSourceFile: (name, languageVersion) => {
+            if (name !== fileName) return undefined;
+            return ts.createSourceFile(name, tsInterface, languageVersion, true);
+        },
+        getDefaultLibFileName: () => "lib.d.ts",
+        writeFile: () => {
+            /* no-op */
+        },
+        getCurrentDirectory: () => "/",
+        getDirectories: () => [],
+        directoryExists: () => true,
+        getCanonicalFileName: (name) => name,
+        useCaseSensitiveFileNames: () => true,
+        getNewLine: () => "\n",
+    };
 
-    // The FS backed API means that it will use the node_modules for lib.d.ts lookups
-    const system = createFSBackedSystem(fsMap, __dirname, ts);
-    const env = createVirtualTypeScriptEnvironment(system, ["/schema.ts"], ts);
-    const program = env.languageService.getProgram();
-    if (!program) throw new Error("No program");
+    const program = ts.createProgram(
+        [fileName],
+        {
+            noLib: true,
+            target: ts.ScriptTarget.ES2022,
+            module: ts.ModuleKind.ESNext,
+        },
+        host,
+    );
 
-    const schemaConfig: Config = { path: "/schema.ts", tsProgram: program };
+    const schemaConfig: Config = { path: fileName, tsProgram: program };
     const generator = createGenerator(schemaConfig);
 
     const result = generator.createSchema();

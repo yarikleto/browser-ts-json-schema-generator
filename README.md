@@ -1,259 +1,108 @@
-# ts-json-schema-generator
+# browser-ts-json-schema-generator (browser-only)
 
-![Test](https://github.com/vega/ts-json-schema-generator/workflows/Test/badge.svg)
-[![codecov](https://codecov.io/gh/vega/ts-json-schema-generator/branch/master/graph/badge.svg)](https://codecov.io/gh/vega/ts-json-schema-generator)
-[![npm version](https://img.shields.io/npm/v/ts-json-schema-generator.svg)](https://www.npmjs.com/package/ts-json-schema-generator)
+Generate **JSON Schema** from TypeScript types in the **browser**.
 
-Extended version of [https://github.com/xiag-ag/typescript-to-json-schema](https://github.com/xiag-ag/typescript-to-json-schema).
+This fork is **browser-only**:
+- No Node.js CLI
+- No filesystem access
+- You pass TypeScript sources as **strings** (`config.files`)
 
-Inspired by [`YousefED/typescript-json-schema`](https://github.com/YousefED/typescript-json-schema). Here's the differences list:
-
-- this implementation avoids the use of `typeChecker.getTypeAtLocation()` (so probably it keeps correct type aliases)
-- processing AST and formatting JSON schema have been split into two independent steps
-- not exported types, interfaces, enums are not exposed in the `definitions` section in the JSON schema
-
-## Contributors
-
-This project is made possible by a [community of contributors](https://github.com/vega/ts-json-schema-generator/graphs/contributors). We welcome contributions of any kind (issues, code, documentation, examples, tests,...). Please read our [code of conduct](https://vega.github.io/vega/about/code-of-conduct).
-
-## CLI Usage
-
-Run the schema generator with npx:
+### Install
 
 ```bash
-npx ts-json-schema-generator --path 'my/project/**/*.ts' --type 'My.Type.Name'
+npm i @yarikleto/browser-ts-json-schema-generator
 ```
 
-Or install the package and then run it
+### How it works (browser mode)
 
-```bash
-npm install --save ts-json-schema-generator
-./node_modules/.bin/ts-json-schema-generator --path 'my/project/**/*.ts' --type 'My.Type.Name'
-```
+To build a TypeScript `Program` in a browser, the generator needs:
+- **`files`**: your `.ts/.d.ts` sources as strings
+- **`rootNames`**: entrypoints (defaults to `Object.keys(files)`)
+- **`compilerOptions`**: optional TS compiler options
+- **`lib`**: TypeScript standard library `.d.ts` files (unless you set `compilerOptions.noLib = true`)
 
-Note that different platforms (e.g. Windows) may use different path separators so you may have to adjust the command above.
+### Example 1: simplest (no standard library)
 
-Also note that you need to quote paths with `*` as otherwise the shell will expand the paths and therefore only pass the first path to the generator.
-
-By default, the command-line generator will use the `tsconfig.json` file in the current working directory, or the first parent directory that contains a `tsconfig.json` file up to the root of the filesystem. If you want to use a different `tsconfig.json` file, you can use the `--tsconfig` option. In particular, if you need to use different compilation options for types, you may want to create a separate `tsconfig.json` file for the schema generation only.
-
-### Options
-
-```
-  -p, --path <path>              Source file path
-  -t, --type <name>              Type name
-  -i, --id <name>                $id for generated schema
-  -f, --tsconfig <path>          Custom tsconfig.json path
-  -e, --expose <expose>          Type exposing (choices: "all", "none", "export", default: "export")
-  -j, --jsDoc <extended>         Read JsDoc annotations (choices: "none", "basic", "extended", default: "extended")
-  --markdown-description         Generate `markdownDescription` in addition to `description`.
-  --full-description             Include the full raw JSDoc comment as `fullDescription` in the schema.
-  --functions <functions>        How to handle functions. `fail` will throw an error. `comment` will add a comment. `hide` will treat the function like a NeverType or HiddenType.
-                                 (choices: "fail", "comment", "hide", default: "comment")
-  --minify                       Minify generated schema (default: false)
-  --unstable                     Do not sort properties
-  --strict-tuples                Do not allow additional items on tuples
-  --no-top-ref                   Do not create a top-level $ref definition
-  --no-type-check                Skip type checks to improve performance
-  --no-ref-encode                Do not encode references
-  -o, --out <file>               Set the output file (default: stdout)
-  --validation-keywords [value]  Provide additional validation keywords to include (default: [])
-  --additional-properties        Allow additional properties for objects with no index signature (default: false)
-  -V, --version                  output the version number
-  -h, --help                     display help for command
-```
-
-## Programmatic Usage
-
-```js
-// main.js
-
-const tsj = require("ts-json-schema-generator");
-const fs = require("fs");
-
-/** @type {import('ts-json-schema-generator/dist/src/Config').Config} */
-const config = {
-    path: "path/to/source/file",
-    tsconfig: "path/to/tsconfig.json",
-    type: "*", // Or <type-name> if you want to generate schema for that one type only
-};
-
-const outputPath = "path/to/output/file";
-
-const schema = tsj.createGenerator(config).createSchema(config.type);
-const schemaString = JSON.stringify(schema, null, 2);
-fs.writeFile(outputPath, schemaString, (err) => {
-    if (err) throw err;
-});
-```
-
-Run the schema generator via `node main.js`.
-
-### Custom formatting
-
-Extending the built-in formatting is possible by creating a custom formatter and adding it to the main formatter:
-
-1. First we create a formatter, in this case for formatting function types (note that there is a built in one):
+Use this when your types don’t rely on built-in lib types (`Array`, `Record`, `Promise`, `Date`, etc).
 
 ```ts
-// my-function-formatter.ts
-import { BaseType, Definition, FunctionType, SubTypeFormatter } from "ts-json-schema-generator";
-import ts from "typescript";
-
-export class MyFunctionTypeFormatter implements SubTypeFormatter {
-    // You can skip this line if you don't need childTypeFormatter
-    public constructor(private childTypeFormatter: TypeFormatter) {}
-
-    public supportsType(type: BaseType): boolean {
-        return type instanceof FunctionType;
-    }
-
-    public getDefinition(type: FunctionType): Definition {
-        // Return a custom schema for the function property.
-        return {
-            type: "object",
-            properties: {
-                isFunction: {
-                    type: "boolean",
-                    const: true,
-                },
-            },
-        };
-    }
-
-    // If this type does NOT HAVE children, generally all you need is:
-    public getChildren(type: FunctionType): BaseType[] {
-        return [];
-    }
-
-    // However, if children ARE supported, you'll need something similar to
-    // this (see src/TypeFormatter/{Array,Definition,etc}.ts for some examples):
-    public getChildren(type: FunctionType): BaseType[] {
-        return this.childTypeFormatter.getChildren(type.getType());
-    }
-}
-```
-
-2. Then we add the formatter as a child to the core formatter using the augmentation callback:
-
-```ts
-import { createProgram, createParser, SchemaGenerator, createFormatter } from "ts-json-schema-generator";
-import { MyFunctionTypeFormatter } from "./my-function-formatter.ts";
-import fs from "fs";
+import { createGenerator } from "@yarikleto/browser-ts-json-schema-generator";
 
 const config = {
-    path: "path/to/source/file",
-    tsconfig: "path/to/tsconfig.json",
-    type: "*", // Or <type-name> if you want to generate schema for that one type only
+  type: "MyType",
+  files: {
+    "/main.ts": `
+      export interface MyType {
+        name: string;
+      }
+    `,
+  },
+  rootNames: ["/main.ts"],
+  compilerOptions: { noLib: true },
 };
 
-// We configure the formatter an add our custom formatter to it.
-const formatter = createFormatter(config, (fmt, circularReferenceTypeFormatter) => {
-    // If your formatter DOES NOT support children, e.g. getChildren() { return [] }:
-    fmt.addTypeFormatter(new MyFunctionTypeFormatter());
-    // If your formatter DOES support children, you'll need this reference too:
-    fmt.addTypeFormatter(new MyFunctionTypeFormatter(circularReferenceTypeFormatter));
-});
-
-const program = createProgram(config);
-const parser = createParser(program, config);
-const generator = new SchemaGenerator(program, parser, formatter, config);
-const schema = generator.createSchema(config.type);
-const outputPath = "path/to/output/file";
-
-const schemaString = JSON.stringify(schema, null, 2);
-fs.writeFile(outputPath, schemaString, (err) => {
-    if (err) throw err;
-});
+const schema = createGenerator(config).createSchema(config.type);
+console.log(schema);
 ```
 
-### Custom parsing
+### Example 2: with TypeScript lib `.d.ts`
 
-Similar to custom formatting, extending the built-in parsing works practically the same way:
-
-1. First we create a parser, in this case for parsing construct types:
+If you use lib types (like `string[]`, `Promise<T>`, `Date`, etc), provide the TS lib `.d.ts` content in `config.lib`.
 
 ```ts
-// my-constructor-parser.ts
-import { Context, StringType, ReferenceType, BaseType, SubNodeParser } from "ts-json-schema-generator";
-// use typescript exported by TJS to avoid version conflict
-import ts from "ts-json-schema-generator";
-
-export class MyConstructorParser implements SubNodeParser {
-    supportsNode(node: ts.Node): boolean {
-        return node.kind === ts.SyntaxKind.ConstructorType;
-    }
-    createType(node: ts.Node, context: Context, reference?: ReferenceType): BaseType | undefined {
-        return new StringType(); // Treat constructors as strings in this example
-    }
-}
-```
-
-2. Then we add the parser as a child to the core parser using the augmentation callback:
-
-```ts
-import { createProgram, createParser, SchemaGenerator, createFormatter } from "ts-json-schema-generator";
-import { MyConstructorParser } from "./my-constructor-parser.ts";
-import fs from "fs";
+import { createGenerator, ts } from "@yarikleto/browser-ts-json-schema-generator";
 
 const config = {
-    path: "path/to/source/file",
-    tsconfig: "path/to/tsconfig.json",
-    type: "*", // Or <type-name> if you want to generate schema for that one type only
+  type: "MyType",
+  files: {
+    "/main.ts": `
+      export interface MyType {
+        tags: string[];
+      }
+    `,
+  },
+  rootNames: ["/main.ts"],
+  compilerOptions: {
+    target: ts.ScriptTarget.ES2022,
+    module: ts.ModuleKind.ESNext,
+  },
+  lib: {
+    // Must include the default lib file TypeScript expects for your compilerOptions.
+    // You decide how to load these strings (bundle them, fetch them, etc).
+    "lib.es2022.d.ts": "/* ... */",
+    "lib.dom.d.ts": "/* ... */",
+    "lib.es5.d.ts": "/* ... */",
+  },
 };
 
-const program = createProgram(config);
-
-// We configure the parser an add our custom parser to it.
-const parser = createParser(program, config, (prs) => {
-    prs.addNodeParser(new MyConstructorParser());
-});
-
-const formatter = createFormatter(config);
-const generator = new SchemaGenerator(program, parser, formatter, config);
-const schema = generator.createSchema(config.type);
-const outputPath = "path/to/output/file";
-
-const schemaString = JSON.stringify(schema, null, 2);
-fs.writeFile(outputPath, schemaString, (err) => {
-    if (err) throw err;
-});
+const schema = createGenerator(config).createSchema(config.type);
 ```
 
-## Current state
+### Example 3: build schema for all exported types
 
-- `interface` types
-- `enum` types
-- `union`, `tuple`, `type[]` types
-- `Date`, `RegExp`, `URL` types
-- `string`, `boolean`, `number` types
-- `"value"`, `123`, `true`, `false`, `null`, `undefined` literals
-- type aliases
-- generics
-- `typeof`
-- `keyof`
-- conditional types
-- functions
-- `Promise<T>` unwraps to `T`
-- Overrides (like `@format`)
+```ts
+import { createGenerator } from "@yarikleto/browser-ts-json-schema-generator";
 
-## Run locally
+const config = {
+  type: "*",
+  files: {
+    "/main.ts": `
+      export interface A { a: string }
+      export interface B { b: number }
+    `,
+  },
+  rootNames: ["/main.ts"],
+  compilerOptions: { noLib: true },
+};
 
-`npm run --silent run -- --path 'test/valid-data/type-mapped-array/*.ts' --type 'MyObject'`
+const schema = createGenerator(config).createSchema(config.type);
+```
 
-## Debug
+### Advanced: bring your own `ts.Program`
 
-`npm run --silent debug -- --path 'test/valid-data/type-mapped-array/*.ts' --type 'MyObject'`
+If you already have a TypeScript `Program` (for example from a language service / editor), pass it via `config.tsProgram` and the generator will use it directly.
 
-And connect via the debugger protocol.
+### Notes
 
-[AST Explorer](https://astexplorer.net/) is amazing for developers of this tool!
-
-## Publish
-
-Publishing is handled by a 2-branch [pre-release process](https://intuit.github.io/auto/docs/generated/shipit#next-branch-default), configured in `publish-auto.yml`. All changes should be based off the default `next` branch, and are published automatically.
-
-- PRs made into the default branch are auto-deployed to the `next` pre-release tag on NPM. The result can be installed with `npm install ts-json-schema-generator@next`
-    - When merging into `next`, please use the `squash and merge` strategy.
-- To release a new stable version, open a PR from `next` into `stable` using this [compare link](https://github.com/vega/ts-json-schema-generator/compare/stable...next).
-    - When merging from `next` into `stable`, please use the `create a merge commit` strategy.
+- **Imports between your in-memory files** work as long as you include all referenced files in `config.files`.
+- The generator does **not** fetch dependencies for you. If your sources import external packages, you must provide their `.d.ts` content in `config.files` too.

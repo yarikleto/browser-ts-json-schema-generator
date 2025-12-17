@@ -1,6 +1,7 @@
-import path from "path";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { createParser } from "../../factory";
+import { createParser } from "../../factory/index.js";
 import { Context } from "../../src/NodeParser.js";
 import { LiteralType } from "../../src/Type/LiteralType.js";
 import { NumberType } from "../../src/Type/NumberType.js";
@@ -9,6 +10,7 @@ import { DEFAULT_CONFIG } from "../../src/Config.js";
 import { describe, it } from "node:test";
 import assert from "node:assert";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SOURCE = path.resolve(__dirname, "./source.ts");
 
 describe("sourceless-nodes", () => {

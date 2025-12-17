@@ -49,7 +49,8 @@ export abstract class BaseError extends Error {
         );
     }
 
-    format(isTTY = process.env.TTY || process.stdout.isTTY): string {
+    format(isTTY = false): string {
+        // Browser-safe default: no TTY, no colors. Callers can explicitly pass `true` if desired.
         const formatter = isTTY ? ts.formatDiagnosticsWithColorAndContext : ts.formatDiagnostics;
 
         return formatter([this.diagnostic], {

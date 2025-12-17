@@ -1,9 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "CommonJS",
-    "moduleResolution": "Node",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
     "esModuleInterop": true,
+    "verbatimModuleSyntax": true,
+    "types": [],
     "isolatedModules": false,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
@@ -18,14 +20,14 @@
     "removeComments": true,
     "resolveJsonModule": true,
     "noLib": false,
+    "skipLibCheck": true,
     "sourceMap": true,
     "pretty": true,
-    "typeRoots": ["node_modules/@types"],
     "outDir": "dist",
     "incremental": true,
     "importHelpers": true
   },
-  "files": ["ts-json-schema-generator.ts", "index.ts"],
+  "files": ["index.ts"],
   "include": ["src/**/*.ts", "factory/**/*.ts"],
   "exclude": ["node_modules", "dist", "cjs"]
 }

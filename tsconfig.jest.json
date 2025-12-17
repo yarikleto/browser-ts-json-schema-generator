@@ -1,0 +1,14 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "module": "ESNext",
+        "verbatimModuleSyntax": false,
+        "types": [
+            "jest"
+        ],
+        "noEmit": true
+    },
+    "include": [
+        "browser-test/**/*.ts"
+    ]
+}

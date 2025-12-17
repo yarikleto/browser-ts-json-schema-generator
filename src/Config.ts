@@ -137,13 +137,39 @@ export interface Config {
      * Useful for programmatic usage with existing TypeScript compilation, or for vfs scenarios where you do not want file-system representation.
      */
     tsProgram?: ts.Program;
+
+    /**
+     * Browser-only: in-memory source files (key = virtual file path, value = file contents).
+     * If provided (and `tsProgram` is not), these will be used to build a TypeScript Program without file system access.
+     */
+    files?: Record<string, string>;
+
+    /**
+     * Browser-only: entrypoint/root files for the TypeScript Program.
+     * If omitted, defaults to `Object.keys(files)`.
+     */
+    rootNames?: string[];
+
+    /**
+     * Browser-only: in-memory TypeScript lib `.d.ts` files (e.g. `/lib.es2022.d.ts`).
+     * Required unless you pass `compilerOptions.noLib = true`.
+     */
+    lib?: Record<string, string>;
+
+    /**
+     * Browser-only: compiler options used when building a Program from `files`/`lib`.
+     */
+    compilerOptions?: ts.CompilerOptions;
 }
 
 export type CompletedConfig = Config & typeof DEFAULT_CONFIG;
 
 export type FunctionOptions = "fail" | "comment" | "hide";
 
-export const DEFAULT_CONFIG: Omit<Required<Config>, "path" | "type" | "schemaId" | "tsconfig" | "tsProgram"> = {
+export const DEFAULT_CONFIG: Omit<
+    Required<Config>,
+    "path" | "type" | "schemaId" | "tsconfig" | "tsProgram" | "files" | "rootNames" | "lib" | "compilerOptions"
+> = {
     expose: "export",
     topRef: true,
     jsDoc: "extended",

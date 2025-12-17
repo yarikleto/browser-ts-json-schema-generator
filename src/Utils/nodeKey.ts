@@ -44,7 +44,8 @@ export function getKey(node: Node, context: Context): string {
         if (!source) {
             ids.push(Math.random());
         } else {
-            const filename = source.fileName.substring(process.cwd().length + 1).replace(/\//g, "_");
+            // Browser-safe: avoid process.cwd(). The actual fileName value is enough for stable hashing.
+            const filename = source.fileName.replace(/[\\/]/g, "_");
             ids.push(hash(filename), node.pos, node.end);
         }
 

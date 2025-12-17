@@ -154,5 +154,5 @@ export * from "./src/SchemaGenerator.js";
 
 export * from "./factory/index.js";
 
-import ts from "typescript";
+import ts from "./src/ts.js";
 export { ts };
