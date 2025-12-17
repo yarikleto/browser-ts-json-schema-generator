@@ -91,7 +91,23 @@ export function translate(types: BaseType[]): BaseType {
                 } else {
                     const primitives = currentTypes.filter((c) => c instanceof PrimitiveType);
                     if (primitives.length === 1) {
-                        result.push(primitives[0]);
+                        // If we have an intersection like `string & "a"`, keep the literal ("a") rather than widening to string.
+                        const prim = primitives[0];
+                        const literals = currentTypes.filter((c): c is LiteralType => c instanceof LiteralType);
+                        const compatibleLiterals = literals.filter((lit) => {
+                            const v = lit.getValue();
+                            if (prim instanceof StringType) return typeof v === "string";
+                            // Other primitives could be added here as needed.
+                            return false;
+                        });
+
+                        if (compatibleLiterals.length === 1) {
+                            result.push(compatibleLiterals[0]);
+                        } else if (compatibleLiterals.length > 1) {
+                            result.push(new UnionType(uniqueTypeArray(compatibleLiterals)));
+                        } else {
+                            result.push(prim);
+                        }
                     } else if (primitives.length > 1) {
                         // conflict -> ignore
                     } else if (currentTypes.length === 1) {

@@ -14,13 +14,43 @@ export class TypeofNodeParser implements SubNodeParser {
     public constructor(
         protected typeChecker: ts.TypeChecker,
         protected childNodeParser: NodeParser,
-    ) {}
+    ) { }
 
     public supportsNode(node: ts.TypeQueryNode): boolean {
         return node.kind === ts.SyntaxKind.TypeQuery;
     }
 
     public createType(node: ts.TypeQueryNode, context: Context, reference?: ReferenceType): BaseType {
+        // TypeScript supports instantiation in type queries: `typeof fn<T>`.
+        // In those cases we must let TypeScript compute the instantiated type; otherwise we lose the
+        // generic substitution context (and utility types like ReturnType<...> won't reduce properly).
+        if (node.pos !== -1 && node.typeArguments?.length) {
+            try {
+                const tsType = this.typeChecker.getTypeFromTypeNode(node);
+                const reduced = this.typeChecker.typeToTypeNode(
+                    tsType,
+                    node,
+                    ts.NodeBuilderFlags.NoTruncation | ts.NodeBuilderFlags.IgnoreErrors,
+                );
+
+                // Avoid infinite recursion when TS returns the exact same type query node.
+                if (
+                    reduced &&
+                    !(
+                        ts.isTypeQueryNode(reduced) &&
+                        ts.isIdentifier(reduced.exprName) &&
+                        ts.isIdentifier(node.exprName) &&
+                        reduced.exprName.escapedText === node.exprName.escapedText &&
+                        (reduced.typeArguments?.length ?? 0) === (node.typeArguments?.length ?? 0)
+                    )
+                ) {
+                    return this.childNodeParser.createType(reduced, context, reference);
+                }
+            } catch {
+                // Fall back to the regular node-based implementation below.
+            }
+        }
+
         let symbol = this.typeChecker.getSymbolAtLocation(node.exprName)!;
         if (symbol.flags & ts.SymbolFlags.Alias) {
             symbol = this.typeChecker.getAliasedSymbol(symbol);

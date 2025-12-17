@@ -64,6 +64,7 @@ import { PromiseNodeParser } from "../src/NodeParser/PromiseNodeParser.js";
 import { SpreadElementNodeParser } from "../src/NodeParser/SpreadElementNodeParser.js";
 import { IdentifierNodeParser } from "../src/NodeParser/IdentifierNodeParser.js";
 import { castArray } from "../src/Utils/castArray.js";
+import { ImportTypeNodeParser } from "../src/NodeParser/ImportTypeNodeParser.js";
 
 export type ParserAugmentor = (parser: MutableParser) => void;
 
@@ -138,6 +139,7 @@ export function createParser(program: ts.Program, config: CompletedConfig, augme
 
         .addNodeParser(new PromiseNodeParser(typeChecker, chainNodeParser))
         .addNodeParser(new TypeReferenceNodeParser(typeChecker, chainNodeParser))
+        .addNodeParser(new ImportTypeNodeParser(typeChecker, chainNodeParser))
         .addNodeParser(new ExpressionWithTypeArgumentsNodeParser(typeChecker, chainNodeParser))
         .addNodeParser(new IndexedAccessTypeNodeParser(typeChecker, chainNodeParser))
         .addNodeParser(new InferTypeNodeParser(typeChecker, chainNodeParser))

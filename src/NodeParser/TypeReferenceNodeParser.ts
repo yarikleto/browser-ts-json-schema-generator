@@ -78,6 +78,17 @@ export class TypeReferenceNodeParser implements SubNodeParser {
         if (node.pos !== -1 && node.typeArguments?.length && shouldReduce) {
             try {
                 const tsType = this.typeChecker.getTypeFromTypeNode(node);
+
+                // If TypeScript already reduced this utility type to a type parameter (very common for
+                // ReturnType<typeof genericFn<T>>), avoid going through `typeToTypeNode` because it produces
+                // synthesized nodes that may not carry symbols/real positions.
+                if ((tsType.flags & ts.TypeFlags.TypeParameter) && tsType.symbol?.name) {
+                    const mapped = context.getArgument(tsType.symbol.name);
+                    if (mapped) {
+                        return mapped;
+                    }
+                }
+
                 const reduced = this.typeChecker.typeToTypeNode(
                     tsType,
                     node,
@@ -87,9 +98,13 @@ export class TypeReferenceNodeParser implements SubNodeParser {
                 // Avoid infinite recursion when TS returns the exact same type reference node.
                 if (
                     reduced &&
-                    !(ts.isTypeReferenceNode(reduced) &&
-                        reduced.typeName.getText() === node.typeName.getText() &&
-                        (reduced.typeArguments?.length ?? 0) === (node.typeArguments?.length ?? 0))
+                    !(
+                        ts.isTypeReferenceNode(reduced) &&
+                        ts.isIdentifier(reduced.typeName) &&
+                        ts.isIdentifier(node.typeName) &&
+                        reduced.typeName.escapedText === node.typeName.escapedText &&
+                        (reduced.typeArguments?.length ?? 0) === (node.typeArguments?.length ?? 0)
+                    )
                 ) {
                     return this.childNodeParser.createType(reduced, context);
                 }
