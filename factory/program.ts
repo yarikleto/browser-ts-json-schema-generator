@@ -89,7 +89,9 @@ function getAllFiles(config: CompletedConfig): FileMap {
 
 export function createProgram(config: CompletedConfig): ts.Program {
     const allFiles = getAllFiles(config);
-    const rootNames = (config.rootNames?.length ? config.rootNames : Object.keys(config.files ?? {})).map(
+    // Important: distinguish between `rootNames` omitted vs explicitly provided as `[]`.
+    // If omitted, default to all provided source files. If explicitly `[]`, treat as "no roots".
+    const rootNames = (config.rootNames !== undefined ? config.rootNames : Object.keys(config.files ?? {})).map(
         normalizeFileName,
     );
 
@@ -130,4 +132,3 @@ export function createProgram(config: CompletedConfig): ts.Program {
 
     return program;
 }
-
