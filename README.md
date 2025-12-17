@@ -23,20 +23,21 @@ To build a TypeScript `Program` in a browser, the generator needs:
 - **`files`**: your `.ts/.d.ts` sources as strings
 - **`rootNames`**: entrypoints (defaults to `Object.keys(files)`)
 - **`compilerOptions`**: optional TS compiler options
-- **`lib`**: TypeScript standard library `.d.ts` files (unless you set `compilerOptions.noLib = true`)
+- **`lib`**: in-memory TypeScript standard library `.d.ts` contents (unless you set `compilerOptions.noLib = true`)
+  - `compilerOptions.lib` controls **which** lib files TypeScript wants to include (e.g. `["es2022", "dom"]`)
+  - `config.lib` must provide the **actual file contents** for those libs in browser/VFS mode (e.g. `"lib.es2022.d.ts"`, `"lib.dom.d.ts"`)
+  - If `compilerOptions.noLib = true`, then TypeScript won’t include any libs, so `compilerOptions.lib` is effectively ignored
+- **`skipTypeCheck`**: optional. Skips the “throw on TS diagnostics” gate. Note: when `compilerOptions.noLib = true`, the generator automatically skips this gate.
 
 ### Example 1: simplest (no standard library)
 
-Use this when your types don’t rely on built-in lib types (`Array`, `Record`, `Promise`, `Date`, etc).
+Use this when you don’t want to provide TypeScript lib `.d.ts` files.
 
 ```ts
 import { createGenerator } from "@yarikleto/browser-ts-json-schema-generator";
 
 const config = {
   type: "MyType",
-  // Without TypeScript lib `.d.ts` files, TypeScript will report missing global types.
-  // Schema generation still works, but you should skip type-checking.
-  skipTypeCheck: true,
   files: {
     "/main.ts": `
       export interface MyType {
@@ -45,6 +46,7 @@ const config = {
     `,
   },
   rootNames: ["/main.ts"],
+  // No TypeScript standard library. In this mode the generator automatically skips the type-check gate.
   compilerOptions: { noLib: true },
 };
 
@@ -55,6 +57,9 @@ console.log(schema);
 ### Example 2: with TypeScript lib `.d.ts`
 
 If you use lib types (like `string[]`, `Promise<T>`, `Date`, etc), provide the TS lib `.d.ts` content in `config.lib`.
+
+Tip: when you provide libs, you can keep the default behavior (type-check gate enabled) to catch TS errors early,
+or set `skipTypeCheck: true` to skip the gate for performance.
 
 #### How to provide `lib.d.ts` in a browser
 
@@ -151,7 +156,6 @@ import { createGenerator } from "@yarikleto/browser-ts-json-schema-generator";
 
 const config = {
   type: "*",
-  skipTypeCheck: true,
   files: {
     "/main.ts": `
       export interface A { a: string }
@@ -159,6 +163,7 @@ const config = {
     `,
   },
   rootNames: ["/main.ts"],
+  // No TypeScript standard library. In this mode the generator automatically skips the type-check gate.
   compilerOptions: { noLib: true },
 };
 
