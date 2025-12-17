@@ -30,6 +30,9 @@ import { createGenerator } from "@yarikleto/browser-ts-json-schema-generator";
 
 const config = {
   type: "MyType",
+  // Without TypeScript lib `.d.ts` files, TypeScript will report missing global types.
+  // Schema generation still works, but you should skip type-checking.
+  skipTypeCheck: true,
   files: {
     "/main.ts": `
       export interface MyType {
@@ -85,6 +88,7 @@ import { createGenerator } from "@yarikleto/browser-ts-json-schema-generator";
 
 const config = {
   type: "*",
+  skipTypeCheck: true,
   files: {
     "/main.ts": `
       export interface A { a: string }

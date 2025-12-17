@@ -121,7 +121,8 @@ export function createProgram(config: CompletedConfig): ts.Program {
         const diagnostics = ts.getPreEmitDiagnostics(program);
         if (diagnostics.length) {
             throw new BuildError({
-                messageText: "Type check error",
+                messageText:
+                    "Type check error. In browser mode, either provide TypeScript lib `.d.ts` files via `config.lib`, or set `skipTypeCheck: true` (especially when using `compilerOptions.noLib: true`).",
                 relatedInformation: [...diagnostics],
             });
         }

@@ -1,6 +1,6 @@
 {
   "name": "@yarikleto/browser-ts-json-schema-generator",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Generate JSON Schema from TypeScript types in the browser (no Node.js / no filesystem).",
   "keywords": [
     "ts",
