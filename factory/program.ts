@@ -18,6 +18,22 @@ function createInMemoryCompilerHost(files: FileMap, options: ts.CompilerOptions)
 
     const getText = (fileName: string): string | undefined => normalized[normalizeFileName(fileName)];
 
+    const pickDefaultLibFileName = (opts: ts.CompilerOptions): string => {
+        // If the user provided TypeScript lib sources in-memory, prefer TS's default lib name *if present*.
+        // Otherwise fall back to common names in the provided lib map (e.g. "lib.d.ts" for tiny synthetic libs).
+        const tsDefault = normalizeFileName(ts.getDefaultLibFileName(opts));
+        if (getText(tsDefault) !== undefined) return tsDefault;
+
+        const libDotTs = Object.keys(normalized).find((k) => /(^|\/)lib\.d\.ts$/.test(k));
+        if (libDotTs && getText(libDotTs) !== undefined) return libDotTs;
+
+        const libLike = Object.keys(normalized).filter((k) => /(^|\/)lib\..*\.d\.ts$/.test(k)).sort();
+        if (libLike.length && getText(libLike[0]) !== undefined) return libLike[0];
+
+        // Last resort: ask TypeScript for its default. If the file isn't provided, TS will emit diagnostics.
+        return tsDefault;
+    };
+
     const host: ts.CompilerHost = {
         fileExists: (fileName: string) => getText(fileName) !== undefined,
         readFile: (fileName: string) => getText(fileName),
@@ -33,7 +49,7 @@ function createInMemoryCompilerHost(files: FileMap, options: ts.CompilerOptions)
             }
             return ts.createSourceFile(fileName, text, languageVersion, true);
         },
-        getDefaultLibFileName: (opts: ts.CompilerOptions) => ts.getDefaultLibFileName(opts),
+        getDefaultLibFileName: (opts: ts.CompilerOptions) => pickDefaultLibFileName(opts),
         writeFile: () => {
             /* no-op */
         },
@@ -104,18 +120,6 @@ export function createProgram(config: CompletedConfig): ts.Program {
 
     const options: ts.CompilerOptions = { ...getDefaultCompilerOptions(), ...(config.compilerOptions ?? {}) };
     const host = createInMemoryCompilerHost(allFiles, options);
-
-    // Ensure the default lib is available if the user didn't opt out.
-    if (!options.noLib) {
-        const defaultLib = normalizeFileName(host.getDefaultLibFileName(options));
-        if (!host.fileExists(defaultLib)) {
-            throw new BuildError({
-                messageText:
-                    `Missing TypeScript lib file "${defaultLib}". In browser mode, pass lib .d.ts contents via ` +
-                    "`config.lib` (e.g. { [\"/lib.es2022.d.ts\"]: \"...\" }) or set `compilerOptions.noLib = true`.",
-            });
-        }
-    }
 
     const program = ts.createProgram(rootNames, options, host);
 

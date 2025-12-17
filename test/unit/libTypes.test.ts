@@ -60,6 +60,67 @@ it("can typecheck code using standard lib types when TS lib .d.ts files are prov
     );
 });
 
+it("when multiple lib files are provided, prefers TypeScript default lib name if present", () => {
+    const fileName = "/main.ts";
+    const files: Record<string, string> = {
+        [fileName]: `
+export interface NeedsLib {
+  promise: Promise<number>;
+  map: Map<string, Set<number>>;
+  date: Date;
+}
+`,
+    };
+
+    const tsDefaultLibName = ts.getDefaultLibFileName({ target: ts.ScriptTarget.ES2022 });
+
+    const minimalLib = `
+// Minimal "baseline" globals TypeScript expects when noLib=false.
+type PropertyKey = string | number | symbol;
+interface Object {}
+interface Function {}
+interface IArguments {}
+interface ArrayLike<T> { length: number; [n: number]: T; }
+interface Array<T> extends ArrayLike<T> {}
+interface ReadonlyArray<T> extends ArrayLike<T> {}
+interface String {}
+interface Number {}
+interface Boolean {}
+interface RegExp {}
+
+// The specific lib types this test uses.
+declare interface Promise<T> {}
+declare interface Map<K, V> {}
+declare interface Set<T> {}
+declare class Date {}
+`.trim();
+
+    const completedConfig = {
+        ...DEFAULT_CONFIG,
+        files,
+        rootNames: [fileName],
+        lib: {
+            // Intentionally "bad" lib.d.ts – if the host picked this as default, we'd get missing Promise/Map/etc.
+            "lib.d.ts": "",
+            // Provide TS's default lib file name for the chosen target; host should prefer this key when present.
+            [tsDefaultLibName]: minimalLib,
+        },
+        compilerOptions: {
+            target: ts.ScriptTarget.ES2022,
+            skipLibCheck: false,
+            skipDefaultLibCheck: false,
+        },
+    };
+
+    const program = createProgram(completedConfig as any);
+    const diagnostics = ts.getPreEmitDiagnostics(program);
+    assert.deepStrictEqual(diagnostics, [], "Expected 0 diagnostics when TS-default lib file is present");
+
+    const sourceFiles = program.getSourceFiles().map((sf) => sf.fileName);
+    assert.ok(sourceFiles.includes(tsDefaultLibName), `Expected program to load "${tsDefaultLibName}" as default lib`);
+    assert.ok(!sourceFiles.includes("lib.d.ts"), `Did not expect program to load "lib.d.ts" as default lib`);
+});
+
 it("throws when lib is empty but code uses standard lib types (ensures we don't fall back to filesystem libs)", () => {
     const fileName = "/main.ts";
     const files: Record<string, string> = {
@@ -76,20 +137,30 @@ it("throws when lib is empty but code uses standard lib types (ensures we don't 
         rootNames: [fileName],
         lib: {}, // user provided lib map, but it's empty
         compilerOptions: {
-            // default in createProgram is noLib=false, so a default lib file is required in browser mode
+            // default in createProgram is noLib=false, but since we are in browser/VFS mode there is no filesystem fallback.
+            // If the user doesn't provide lib sources, TypeScript should error (and createProgram will throw).
             skipLibCheck: false,
             skipDefaultLibCheck: false,
         },
     };
 
-    const defaultLibName = ts.getDefaultLibFileName({ target: ts.ScriptTarget.ES2022 });
-
     assert.throws(
         () => createProgram(completedConfig as any),
-        (err: any) =>
-            typeof err?.message === "string" &&
-            err.message.includes("Missing TypeScript lib file") &&
-            err.message.includes(defaultLibName),
+        (err: any) => {
+            if (typeof err?.message !== "string" || !err.message.includes("Type check error")) return false;
+            const related: any[] | undefined = err?.diagnostic?.relatedInformation;
+            const relatedMessages =
+                Array.isArray(related) ? related.map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n")) : [];
+            const haystack = relatedMessages.join("\n");
+
+            // Be flexible about the exact TS diagnostic(s), but ensure we see missing lib/global type signals.
+            return (
+                haystack.includes("Cannot find global type") ||
+                haystack.includes("Cannot find name 'Promise'") ||
+                haystack.includes("Cannot find name 'Map'") ||
+                haystack.includes("Cannot find name 'Set'")
+            );
+        },
     );
 });
 

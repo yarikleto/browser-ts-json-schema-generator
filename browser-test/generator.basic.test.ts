@@ -1,5 +1,4 @@
 import { createGenerator } from "../factory/generator.js";
-import ts from "typescript";
 
 describe("browser generator (in-memory)", () => {
     it("generates schema for a simple exported interface (noLib)", () => {
@@ -54,7 +53,6 @@ describe("browser generator (in-memory)", () => {
     it("generates schema for a type using standard lib types when lib .d.ts files are provided", () => {
         // In browser/VFS mode, the caller must provide TypeScript lib .d.ts sources in-memory.
         // Use a tiny synthetic lib here (no filesystem) to prove the generator actually consumes `config.lib`.
-        const defaultLibName = ts.getDefaultLibFileName({ target: ts.ScriptTarget.ES2022 });
         const fakeLib = `
 // Minimal "baseline" globals TypeScript expects when noLib=false.
 type PropertyKey = string | number | symbol;
@@ -88,7 +86,7 @@ declare class Date {}
                 `,
             },
             rootNames: ["/main.ts"],
-            lib: { [defaultLibName]: fakeLib },
+            lib: { "lib.d.ts": fakeLib },
         }).createSchema("LibType");
 
         const def: any = schema.definitions?.LibType;
