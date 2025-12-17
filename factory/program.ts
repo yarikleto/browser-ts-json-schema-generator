@@ -119,12 +119,18 @@ export function createProgram(config: CompletedConfig): ts.Program {
 
     const program = ts.createProgram(rootNames, options, host);
 
-    if (!config.skipTypeCheck) {
+    // If `noLib` is enabled, the program intentionally does not include the default TS lib declarations.
+    // In that mode, TypeScript will typically emit diagnostics like "Cannot find global type 'Array'".
+    // Since many consumers use `noLib` specifically to avoid shipping lib .d.ts files in browser/VFS mode,
+    // we automatically skip the typecheck gate here (schema generation can still succeed).
+    const shouldTypeCheck = !config.skipTypeCheck && !options.noLib;
+
+    if (shouldTypeCheck) {
         const diagnostics = ts.getPreEmitDiagnostics(program);
         if (diagnostics.length) {
             throw new BuildError({
                 messageText:
-                    "Type check error. In browser mode, either provide TypeScript lib `.d.ts` files via `config.lib`, or set `skipTypeCheck: true` (especially when using `compilerOptions.noLib: true`).",
+                    "Type check error",
                 relatedInformation: [...diagnostics],
             });
         }

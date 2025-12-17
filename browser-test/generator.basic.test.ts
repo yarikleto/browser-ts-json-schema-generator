@@ -1,10 +1,10 @@
 import { createGenerator } from "../factory/generator.js";
+import ts from "typescript";
 
 describe("browser generator (in-memory)", () => {
     it("generates schema for a simple exported interface (noLib)", () => {
         const schema = createGenerator({
             type: "MyType",
-            skipTypeCheck: true,
             files: {
                 "/main.ts": `
                     /** MyType docs */
@@ -33,7 +33,6 @@ describe("browser generator (in-memory)", () => {
     it("supports literal unions (noLib)", () => {
         const schema = createGenerator({
             type: "U",
-            skipTypeCheck: true,
             files: {
                 "/main.ts": `
                     export type U = "a" | "b";
@@ -50,6 +49,54 @@ describe("browser generator (in-memory)", () => {
         } else {
             expect(u?.anyOf?.map((x: any) => x.const)).toEqual(["a", "b"]);
         }
+    });
+
+    it("generates schema for a type using standard lib types when lib .d.ts files are provided", () => {
+        // In browser/VFS mode, the caller must provide TypeScript lib .d.ts sources in-memory.
+        // Use a tiny synthetic lib here (no filesystem) to prove the generator actually consumes `config.lib`.
+        const defaultLibName = ts.getDefaultLibFileName({ target: ts.ScriptTarget.ES2022 });
+        const fakeLib = `
+// Minimal "baseline" globals TypeScript expects when noLib=false.
+type PropertyKey = string | number | symbol;
+interface Object {}
+interface Function {}
+interface IArguments {}
+interface ArrayLike<T> { length: number; [n: number]: T; }
+interface Array<T> extends ArrayLike<T> {}
+interface ReadonlyArray<T> extends ArrayLike<T> {}
+interface String {}
+interface Number {}
+interface Boolean {}
+interface RegExp {}
+
+// The specific lib types this test uses.
+declare interface Promise<T> {}
+declare interface Map<K, V> {}
+declare interface Set<T> {}
+declare class Date {}
+        `.trim();
+
+        const schema = createGenerator({
+            type: "LibType",
+            files: {
+                "/main.ts": `
+                    export interface LibType {
+                      promise: Promise<number>;
+                      map: Map<string, Set<number>>;
+                      date: Date;
+                    }
+                `,
+            },
+            rootNames: ["/main.ts"],
+            lib: { [defaultLibName]: fakeLib },
+        }).createSchema("LibType");
+
+        const def: any = schema.definitions?.LibType;
+        expect(schema.$ref).toBe("#/definitions/LibType");
+        expect(def?.type).toBe("object");
+        expect(def?.properties?.promise).toBeDefined();
+        expect(def?.properties?.map).toBeDefined();
+        expect(def?.properties?.date).toBeDefined();
     });
 });
 
